@@ -10,7 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/tokopedia/gripmock/stub"
+	"github.com/kunwardeep/gripmock/stub"
 )
 
 func main() {
@@ -22,6 +22,7 @@ func main() {
 	stubPath := flag.String("stub", "", "Path where the stub files are (Optional)")
 	imports := flag.String("imports", "/protobuf", "comma separated imports path. default path /protobuf is where gripmock Dockerfile install WKT protos")
 	// for backwards compatibility
+	fmt.Println("os.Args", os.Args)
 	if os.Args[1] == "gripmock" {
 		os.Args = append(os.Args[:1], os.Args[2:]...)
 	}
@@ -56,10 +57,12 @@ func main() {
 	if len(protoPaths) == 0 {
 		log.Fatal("Need atleast one proto file")
 	}
+	fmt.Println("imports", *imports)
 
 	importDirs := strings.Split(*imports, ",")
-
+	fmt.Println("importDirs", importDirs)
 	// generate pb.go and grpc server based on proto
+
 	generateProtoc(protocParam{
 		protoPath:   protoPaths,
 		adminPort:   *adminport,
@@ -68,9 +71,11 @@ func main() {
 		output:      output,
 		imports:     importDirs,
 	})
+	fmt.Println("generated")
 
 	// build the server
 	buildServer(output, protoPaths)
+	fmt.Println("buildServer")
 
 	// and run
 	run, runerr := runGrpcServer(output)
@@ -107,6 +112,9 @@ func generateProtoc(param protocParam) {
 	if len(protodirs) > 0 {
 		protodir = strings.Join(protodirs[:len(protodirs)-1], "/") + "/"
 	}
+	fmt.Println("protodir", protodir)
+	fmt.Println("param.protoPath", param.protoPath)
+	fmt.Println("param.imports", param.imports)
 
 	args := []string{"-I", protodir}
 	// include well-known-types
@@ -114,9 +122,13 @@ func generateProtoc(param protocParam) {
 		args = append(args, "-I", i)
 	}
 	args = append(args, param.protoPath...)
+	// args = append(args, "--go_out=plugins=grpc:"+param.output)
 	args = append(args, "--go_out=plugins=grpc:"+param.output)
+
 	args = append(args, fmt.Sprintf("--gripmock_out=admin-port=%s,grpc-address=%s,grpc-port=%s:%s",
 		param.adminPort, param.grpcAddress, param.grpcPort, param.output))
+	fmt.Println("args----", args)
+
 	protoc := exec.Command("protoc", args...)
 	protoc.Stdout = os.Stdout
 	protoc.Stderr = os.Stderr
@@ -128,7 +140,7 @@ func generateProtoc(param protocParam) {
 	// change package to "main" on generated code
 	for _, proto := range param.protoPath {
 		protoname := getProtoName(proto)
-		sed := exec.Command("sed", "-i", `s/^package \w*$/package main/`, param.output+protoname+".pb.go")
+		sed := exec.Command("sed", "-i", `s/^package \w*$/package main/`, param.output+"github.com/zendesk/zendesk_protobuf_schemas/v3/grpc/zdpmetadata/"+protoname+".pb.go")
 		sed.Stderr = os.Stderr
 		sed.Stdout = os.Stdout
 		err = sed.Run()
@@ -146,6 +158,7 @@ func buildServer(output string, protoPaths []string) {
 	build := exec.Command("go", args...)
 	build.Stdout = os.Stdout
 	build.Stderr = os.Stderr
+	fmt.Println("args", args)
 	err := build.Run()
 	if err != nil {
 		log.Fatal(err)
